@@ -1,0 +1,9 @@
+{
+    "listen_port": 3000,
+    "ignore_target_verify": true,
+    "target_host": "www.baidui.com",
+    "target_uri": "https://www.baidui.com",
+    "cert_path": "cert.pem",
+    "key_path": "key.pem",
+    "ca_path": null
+}

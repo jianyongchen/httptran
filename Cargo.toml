@@ -1,0 +1,17 @@
+[package]
+name = "httptrans"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+hyper = { version = "0.14", features = ["server", "client", "http1", "http2", "tcp"] }
+hyper-rustls = "0.23"
+tokio = { version = "1", features = ["full"] }
+tokio-rustls = "0.23"
+rustls = { version = "0.20", features = ["dangerous_configuration"] }
+rustls-pemfile = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+http = "0.2"
+futures = "0.3"
+webpki-roots = "0.26"
