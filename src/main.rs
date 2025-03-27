@@ -36,7 +36,7 @@ impl ServerCertVerifier for CustomServerCertVerifier {
 }
 
 
-type HttpClient = Client<HttpsConnector<HttpConnector>>;
+type HttpsClient = Client<HttpsConnector<HttpConnector>>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Config {
@@ -55,7 +55,13 @@ fn read_config(path: &str) -> Result<Config, Box<dyn std::error::Error>> {
     Ok(config)
 }
 
-async fn handle_request(req: Request<Body>, client: HttpClient, target_host:String, target_uri:String) -> Result<Response<Body>, Box<dyn std::error::Error + Send + Sync>> {
+async fn handle_request(
+    req: Request<Body>,
+    httpclient: Client<HttpConnector>,
+    httpsclient: HttpsClient,
+    target_host:String,
+    target_uri:String
+) -> Result<Response<Body>, Box<dyn std::error::Error + Send + Sync>> {
     // 解析请求
     let (mut parts, body) = req.into_parts();
 
@@ -104,7 +110,10 @@ async fn handle_request(req: Request<Body>, client: HttpClient, target_host:Stri
     let new_req = Request::from_parts(parts, body);
 
     // 发送请求到目标服务器
-    let res = client.request(new_req).await?;
+    let res = match target_uri.starts_with("https") {
+        true => httpsclient.request(new_req).await?,
+        false => httpclient.request(new_req).await?
+    };
 
     // 返回响应
     Ok(res)
@@ -244,18 +253,20 @@ async fn main() {
         }
     };
 
-    let client = Client::builder().build::<_, hyper::Body>(https);
+    let httpsclient = Client::builder().build::<_, hyper::Body>(https);
+    let httpclient = Client::new();
 
     // 创建服务
     let target_host = config.target_host.clone();
     let target_uri = config.target_uri.clone();
     let make_svc = make_service_fn(move |_conn| {
-        let client = client.clone();
+        let httpsclient = httpsclient.clone();
+        let httpclient = httpclient.clone();
         let host = target_host.clone();
         let uri = target_uri.clone();
         async move {
             Ok::<_, Infallible>(service_fn(move |req| {
-                handle_request(req, client.clone(), host.clone(), uri.clone())
+                handle_request(req, httpclient.clone(), httpsclient.clone(), host.clone(), uri.clone())
             }))
         }
     });
