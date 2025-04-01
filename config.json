@@ -1,6 +1,7 @@
 {
     "listen_port": 3000,
     "ignore_target_verify": true,
+    "enable_https": false,
     "target_host": "www.msluo.cn",
     "target_uri": "http://www.msluo.cn",
     "cert_path": "cert.pem",

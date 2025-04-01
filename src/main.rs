@@ -42,6 +42,7 @@ type HttpsClient = Client<HttpsConnector<HttpConnector>>;
 struct Config {
     listen_port: u16,
     ignore_target_verify: bool,
+    enable_https: bool,
     target_host: String,
     target_uri: String,
     cert_path: Option<String>,
@@ -186,37 +187,6 @@ async fn load_private_key(path: &str) -> Result<rustls::PrivateKey, Box<dyn std:
 async fn main() {
     let config = read_config("config.json").expect("Failed to read config");
     println!("config:{:?}", config);
-    // 加载 TLS 证书
-    let cert_path = match &config.cert_path {
-        None => "cert.pem",
-        Some(path) => {
-            path.as_str()
-        }
-    };
-    let certs = load_certs(cert_path).await;
-
-    // 加载私钥
-    let key_path = match &config.key_path {
-        None => "key.pem",
-        Some(path) => path.as_str()
-    };
-    let key = match load_private_key(key_path).await {
-        Ok(key) => key,
-        Err(e) => {
-            eprintln!("Failed to load private key: {}", e);
-            return;
-        }
-    };
-
-    // 配置 TLS
-    let tls_config = ServerConfig::builder()
-        .with_safe_defaults()
-        .with_no_client_auth()
-        .with_single_cert(certs, key)
-        .unwrap();
-
-    // 创建 TlsAcceptor
-    let tls_acceptor = TlsAcceptor::from(Arc::new(tls_config));
 
     // 创建 HTTPS 客户端
     let ca_path = match &config.key_path {
@@ -278,16 +248,57 @@ async fn main() {
     // 启动服务器
     loop {
         let (stream, _) = listener.accept().await.unwrap();
-        let tls_acceptor = tls_acceptor.clone();
-        let mut make_svc = make_svc.clone();
+        if config.enable_https {
+                // 加载 TLS 证书
+            let cert_path = match &config.cert_path {
+                None => "cert.pem",
+                Some(path) => {
+                    path.as_str()
+                }
+            };
+            let certs = load_certs(cert_path).await;
 
-        tokio::spawn(async move {
-            if let Ok(stream) = tls_acceptor.accept(stream).await {
+            // 加载私钥
+            let key_path = match &config.key_path {
+                None => "key.pem",
+                Some(path) => path.as_str()
+            };
+            let key = match load_private_key(key_path).await {
+                Ok(key) => key,
+                Err(e) => {
+                    eprintln!("Failed to load private key: {}", e);
+                    return;
+                }
+            };
+
+            // 配置 TLS
+            let tls_config = ServerConfig::builder()
+                .with_safe_defaults()
+                .with_no_client_auth()
+                .with_single_cert(certs, key)
+                .unwrap();
+
+            // 创建 TlsAcceptor
+            let tls_acceptor = TlsAcceptor::from(Arc::new(tls_config));
+            let tls_acceptor = tls_acceptor.clone();
+            let mut make_svc = make_svc.clone();
+
+            tokio::spawn(async move {
+                if let Ok(stream) = tls_acceptor.accept(stream).await {
+                    let service = make_svc.call(&()).await.unwrap();
+                    let _ = hyper::server::conn::Http::new()
+                        .serve_connection(stream, service)
+                        .await;
+                }
+            });
+        } else {
+            let mut make_svc = make_svc.clone();
+            tokio::spawn(async move {
                 let service = make_svc.call(&()).await.unwrap();
                 let _ = hyper::server::conn::Http::new()
                     .serve_connection(stream, service)
                     .await;
-            }
-        });
+            });
+        }
     }
 }
