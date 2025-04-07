@@ -98,7 +98,10 @@ async fn handle_request(
     */
 
     println!("Original parts:{:?}", parts);
-    let orig_path = parts.uri.path();
+    let orig_path = match parts.uri.path_and_query() {
+        None => "/",
+        Some(path) => path.as_str()
+    };
     // 修改请求头（可选）
     parts.headers.remove("host");
     parts.headers.insert("host", target_host.parse().unwrap());
